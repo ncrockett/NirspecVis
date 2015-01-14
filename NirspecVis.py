@@ -7,12 +7,14 @@ from scipy import interpolate
 class ObsEpochSA():
 	def __init__(self,EpochLabel, SourceName=None, FitsDir='', Coords=None):
 		self.SourceName = SourceName
-		self.FitsFilenames = self.MakeFitsFilenames(EpochLabel)
+		self.FitsFilenames = self.MakeFitsFilenames(EpochLabel, FitsDir)
 		self.Coords = Coords
 		self.BaryVel = self.CalcBaryVel(Coords, EpochLabel)
 		self.Data = self.readFits(self.FitsFilenames)
+		#self.LineProfiles = None
+		self.Catalog = None
 
-	def MakeFitsFilenames(self, EpochLabel):
+	def MakeFitsFilenames(self, EpochLabel, FitsDir):
 		name, date, time, orders = EpochLabel[0], EpochLabel[1], EpochLabel[2], EpochLabel[3]
 		Norders = len(orders)
 
@@ -72,32 +74,7 @@ class ObsEpochSA():
 
 		return FitsInfo
 
-	def getData(self):
-		return self.Data
-
-	def getSourceName(self):
-		return self.SourceName
-
-
-############################
-############################
-
-class LineProfilesSA():
-	def __init__(self,ObsEpoch,CatName,VelGrid):
-		self.SourceName = ObsEpoch.getSourceName()
-		self.Data = ObsEpoch.getData()
-		self.Catalog = self.ReadCat(CatName)
-		self.LineProfiles = None
-
-	def ReadCat(self, filename):
-		CatInfo = np.loadtxt(filename, dtype='str')
-		wl    = np.array(CatInfo[:,0], dtype='float')
-		mol   = np.array(CatInfo[:,1], dtype='str')
-		trans = np.array(CatInfo[:,2], dtype='str')
-
-		return {'WLCat':wl, 'MolCat':mol, 'TransCat':trans}
-
-	def MakeLineProfiles(self, VelGrid, TransForAvg, MolName):
+	def MakeLineProfiles(self, VelGrid, TransForAvg, MolName, WinMin, WinMax):
 		cc = 3.0e5
 		
 		norders = len(self.Data)
@@ -147,47 +124,69 @@ class LineProfilesSA():
 		output = {'TransForAvg':TransForAvg, 'InData':InData, 'VelGrid':VelGrid, 'SAGrid':SAGrid, 'SAGridSub':SAGridSub, 'USAGrid':USAGrid,
 				  'FluxGrid':FluxGrid, 'FluxGridNorm':FluxGridNorm, 'UFluxGrid':UFluxGrid, 'UFluxGridNorm':UFluxGridNorm}
 
-		self.LineProfiles = output
+		return output
+		#self.LineProfiles = output
 
-	def getAvgLineProfile(self, yname_input):
-		yname, uyname = PickYName(yname_input)
+	def ReadCat(self, filename):
+		CatInfo = np.loadtxt(filename, dtype='str')
+		wl    = np.array(CatInfo[:,0], dtype='float')
+		mol   = np.array(CatInfo[:,1], dtype='str')
+		trans = np.array(CatInfo[:,2], dtype='str')
 
-		TransForAvgInit, InData = np.array(self.LineProfiles['TransForAvg']), np.array(self.LineProfiles['InData'])
-		YvecInit, UYvecInit = np.array(self.LineProfiles[yname]), np.array(self.LineProfiles[uyname])
-		VelGrid = np.array(self.LineProfiles['VelGrid'])
-		Npix = len(VelGrid)
+		self.Catalog = {'WLCat':wl, 'MolCat':mol, 'TransCat':trans}
 
-		SecInData = np.where(InData == True)
-		TransForAvg, Yvec, UYvec = TransForAvgInit[SecInData], YvecInit[SecInData], UYvecInit[SecInData]
-		NumLines = len(TransForAvg)
+	def getData(self):
+		return self.Data
 
-		YvecAvg, UYvecAvg = np.array([]), np.array([])
-		for i in range(0, Npix):
-			YvecO_nan, UYvecO_nan = np.array([]), np.array([])
-			for j in range(0,NumLines):
-				yvec, uyvec = Yvec[j], UYvec[j]
-				YvecO_nan, UYvecO_nan = np.append(YvecO_nan, yvec[i]), np.append(UYvecO_nan, uyvec[i])
-			
-			SecNoNan = np.logical_not(np.isnan(YvecO_nan))
-			YvecO, UYvecO = YvecO_nan[SecNoNan], UYvecO_nan[SecNoNan]
-
-			if (len(YvecO) == 0):
-				YvecAvg, UYvecAvg = np.append(YvecAvg, np.nan), np.append(UYvecAvg, np.nan)
-			else:
-				#uncertainty average needs to be edited here
-				YvecAvg, UYvecAvg = np.append(YvecAvg, np.average(YvecO)), np.append(UYvecAvg, np.average(UYvecO))
-
-		return YvecAvg, UYvecAvg
+	def getSourceName(self):
+		return self.SourceName
 
 
-	def PrintLines(self):
-		trans = self.LineProfiles['TransForAvg']
-		in_data = self.LineProfiles['InData']
-		ntrans = len(trans)
+############################
+############################
 
-		for i in range(0,ntrans):
-			print trans[i], in_data[i]
 
+def CompAvgLineProfile(LineProfiles, yname_input):
+	yname, uyname = PickYName(yname_input)
+
+	TransForAvgInit, InData = np.array(LineProfiles['TransForAvg']), np.array(LineProfiles['InData'])
+	YvecInit, UYvecInit = np.array(LineProfiles[yname]), np.array(LineProfiles[uyname])
+	VelGrid = np.array(LineProfiles['VelGrid'])
+	Npix = len(VelGrid)
+
+	SecInData = np.where(InData == True)
+	TransForAvg, Yvec, UYvec = TransForAvgInit[SecInData], YvecInit[SecInData], UYvecInit[SecInData]
+	NumLines = len(TransForAvg)
+
+	YvecAvg, UYvecAvg = np.array([]), np.array([])
+	for i in range(0, Npix):
+		YvecO_nan, UYvecO_nan = np.array([]), np.array([])
+		for j in range(0,NumLines):
+			yvec, uyvec = Yvec[j], UYvec[j]
+			YvecO_nan, UYvecO_nan = np.append(YvecO_nan, yvec[i]), np.append(UYvecO_nan, uyvec[i])
+		
+		SecNoNan = np.logical_not(np.isnan(YvecO_nan))
+		YvecO, UYvecO = YvecO_nan[SecNoNan], UYvecO_nan[SecNoNan]
+
+		if (len(YvecO) == 0):
+			YvecAvg, UYvecAvg = np.append(YvecAvg, np.nan), np.append(UYvecAvg, np.nan)
+		else:
+			#uncertainty average needs to be edited here
+			YvecAvg, UYvecAvg = np.append(YvecAvg, np.average(YvecO)), np.append(UYvecAvg, np.average(UYvecO))
+
+	return YvecAvg, UYvecAvg
+
+
+############################
+############################
+
+def PrintLines(self):
+	trans = self.LineProfiles['TransForAvg']
+	in_data = self.LineProfiles['InData']
+	ntrans = len(trans)
+
+	for i in range(0,ntrans):
+		print trans[i], in_data[i]
 
 ############################
 ############################
@@ -252,6 +251,4 @@ def MakeHistVecs(xvec, yvec):
 	xvec_out, yvec_out = np.ravel(xvec_bin), np.ravel(yvec_bin)
 
 	return xvec_out, yvec_out
-
-
 
