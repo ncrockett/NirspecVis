@@ -1,8 +1,12 @@
 import numpy as np
+import matplotlib
+matplotlib.use('PS')
 import matplotlib.pyplot as plt
 from PyAstronomy import pyasl
 import datetime, math, pyfits
 from scipy import interpolate 
+from matplotlib.ticker import MaxNLocator 
+from matplotlib.font_manager import FontProperties
 
 class ObsEpochSA():
 	def __init__(self,EpochLabel, SourceName=None, FitsDir='', Coords=None):
@@ -252,6 +256,122 @@ def MakeHistVecs(xvec, yvec):
 
 	return xvec_out, yvec_out
 
+############################
+############################
+
+def PanelParams(xvec_input, yvec_input):
+	yfac = 0.12
+	xlabfac = 0.05
+	ylabfac = 0.15
+
+	xveci, yveci = np.array(xvec_input), np.array(yvec_input)
+	xvec, yvec = xveci[np.logical_not(np.isnan(xveci))], yveci[np.logical_not(np.isnan(yveci))]
+	nepochs = len(yvec)
+
+	xvec_range, yvec_range = np.max(xvec)-np.min(xvec), np.max(yvec)-np.min(yvec)
+
+	xmin, xmax = np.min(xvec), np.max(xvec)	
+	ymin, ymax = np.min(yvec)-(yvec_range*yfac), np.max(yvec)+(yvec_range*yfac)
+
+	xlab, ylab = xmin+(xvec_range*xlabfac), ymax-(yvec_range*ylabfac)
+
+	dy_lab = (ymax - ymin) / 18.0
+
+	return {'ymin':ymin, 'ymax':ymax, 'xlab':xlab, 'ylab':ylab, 'dy_lab':dy_lab}
+
+############################
+############################
+
+def PickSpecSetLabel(input):
+	if (input == 'CO_P'):
+		output = 'I'
+	elif (input == 'CO_ICE'):
+		output = 'II'
+	else:
+		output = ''
+
+	return output
+
+############################
+############################
+
+def Plot4Panels(PlotData, EpochLabels, Xmin=-150.0, Xmax=150.0, PlotDir='plots/'):
+	lwidth = 1.5
+	ColorStr = ['blue', 'red', 'green', 'magenta', 'cyan', 'black']
+
+	Xvec = PlotData['Xvec']
+	UpLeft, UpRight = PlotData['UpLeft'], PlotData['UpRight']
+	LowLeft, LowRight = PlotData['LowLeft'], PlotData['LowRight']
+	nepochs = len(UpLeft)
+
+	## Font properties for axis labels
+	fontp_AxLabel = FontProperties()
+	#fontp.set_size('large')
+	fontp_AxLabel.set_family('sans-serif')
+
+	fig, ax = plt.subplots(2,2, sharex=True, figsize=(9.0,9.0))
+	fig.subplots_adjust(hspace=0.05)
+
+	DateLabel = []
+	for i in range(0,nepochs):
+		DateStr, SpecSetStr = EpochLabels[i][1], EpochLabels[i][4]
+		dateO = str(int(DateStr[4:6]))+'/'+str(int(DateStr[6:8]))+'/'+str(int(DateStr[0:4]))
+		SpecSetStr = PickSpecSetLabel(SpecSetStr)
+		DateLabel.append(dateO + ' (' + SpecSetStr + ')')
+
+		## UPPER LEFT
+		ax[0,0].plot(Xvec, UpLeft[i], linewidth=lwidth, color=ColorStr[i])
+		ax[0,0].set_xlim([Xmin,Xmax])
+		nbins = len(ax[0,0].get_xticklabels())
+		ax[0,0].yaxis.set_major_locator(MaxNLocator(nbins=nbins, prune='lower'))
+		ax[0,0].set_ylabel('Normalized Flux', fontproperties=fontp_AxLabel)
+
+		## LOWER LEFT
+		ax[1,0].plot(Xvec, LowLeft[i], linewidth=lwidth, color=ColorStr[i])
+		nbins = len(ax[1,0].get_xticklabels())
+		ax[1,0].yaxis.set_major_locator(MaxNLocator(nbins=nbins, prune='lower'))
+		ax[1,0].set_ylabel('SA Signal (pixels)')
+		ax[1,0].set_xlabel('Velocity (km/s)')
+
+		## UPPER RIGHT
+		ax[0,1].plot(Xvec, UpRight[i], linewidth=lwidth, color=ColorStr[i])
+		nbins = len(ax[0,1].get_xticklabels())
+		ax[0,1].yaxis.set_major_locator(MaxNLocator(nbins=nbins, prune='lower'))
+
+		## LOWER RIGHT
+		ax[1,1].plot(Xvec, LowRight[i], linewidth=lwidth, color=ColorStr[i])
+		nbins = len(ax[1,1].get_xticklabels())
+		ax[1,1].yaxis.set_major_locator(MaxNLocator(nbins=nbins, prune='lower'))
+		ax[1,1].set_xlabel('Velocity (km/s)')
+
+	## Set limits of panels
+	PanUpLeft = PanelParams(Xvec, UpLeft)
+	ax[0,0].set_ylim(PanUpLeft['ymin'], PanUpLeft['ymax'])
+	PanLowLeft = PanelParams(Xvec, LowLeft)
+	ax[1,0].set_ylim(PanLowLeft['ymin'], PanLowLeft['ymax'])
+	PanUpRight = PanelParams(Xvec, UpRight)
+	ax[0,1].set_ylim(PanUpRight['ymin'], PanUpRight['ymax'])
+	PanLowRight = PanelParams(Xvec, LowRight)
+	ax[1,1].set_ylim(PanLowRight['ymin'], PanLowRight['ymax'])
+
+	ax[0,0].tick_params(axis='y', labelsize='small')
+	ax[1,0].tick_params(axis='y', labelsize='small')
+	ax[0,1].tick_params(axis='y', labelsize='small')
+	ax[1,1].tick_params(axis='y', labelsize='small')
+
+	## Make legend
+	ax[0,0].set_title('Low Excitation')
+	ax[0,1].set_title('High Excitation')
+	for i in range(0,nepochs):
+		ax[0,0].text(PanUpLeft['xlab'],PanUpLeft['ylab']-(i*PanUpLeft['dy_lab']), DateLabel[i], color=ColorStr[i], size='smaller')
+
+
+	## Make plot title
+	SourceName, DateStr = EpochLabels[0][0], EpochLabels[0][1]
+	PlotName = PlotDir + SourceName + '_' + DateStr + 'd.ps'
+	
+	#plt.show(block=False)
+	plt.savefig(PlotName)
 
 
 
