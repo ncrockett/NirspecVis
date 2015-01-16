@@ -102,7 +102,7 @@ class ObsEpochSA():
 
 				if (WLCat_oi > min(wl) and WLCat_oi < max(wl)):
 					InData[i] = True
-					vel = np.multiply(np.divide(np.subtract(wl,WLCat_oi), WLCat_oi), cc)
+					vel = np.multiply(np.divide(np.subtract(wl,WLCat_oi), WLCat_oi), cc) + self.BaryVel
 
 					FuncGridF   = interpolate.interp1d(vel, flux, bounds_error=False)
 					FuncGridUF  = interpolate.interp1d(vel, uflux, bounds_error=False)
@@ -364,7 +364,6 @@ def Plot4Panels(PlotData, EpochLabels, Xmin=-150.0, Xmax=150.0, PlotDir='plots/'
 	ax[0,1].set_title('High Excitation')
 	for i in range(0,nepochs):
 		ax[0,0].text(PanUpLeft['xlab'],PanUpLeft['ylab']-(i*PanUpLeft['dy_lab']), DateLabel[i], color=ColorStr[i], size='smaller')
-
 
 	## Make plot title
 	SourceName, DateStr = EpochLabels[0][0], EpochLabels[0][1]
